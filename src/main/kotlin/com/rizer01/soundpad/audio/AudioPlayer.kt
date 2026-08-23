@@ -3,31 +3,32 @@ package com.rizer01.soundpad.audio
 import com.rizer01.soundpad.model.PlaybackState
 import com.rizer01.soundpad.model.SoundFile
 import kotlinx.coroutines.*
+import kotlin.coroutines.coroutineContext
 import mu.KotlinLogging
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import javax.sound.sampled.*
 
 private val logger = KotlinLogging.logger {}
 
-/**
- * Core audio player engine.
- * Uses javax.sound.sampled with SPI plugins for MP3/OGG support.
- */
 class AudioPlayer {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val activeClips = mutableMapOf<String, ActiveClip>()
+    private val activePlayers = ConcurrentHashMap<String, ActivePlayer>()
+    private var outputDeviceName: String = "default"
 
-    data class ActiveClip(
+    data class ActivePlayer(
         val sound: SoundFile,
         var state: PlaybackState,
         var volume: Float,
-        var thread: Job? = null
+        var thread: Job? = null,
+        var line: SourceDataLine? = null
     )
 
-    /**
-     * Play a sound file
-     */
+    fun setOutputDevice(name: String) {
+        outputDeviceName = name
+    }
+
     fun play(sound: SoundFile, volume: Float = sound.volume, loop: Boolean = sound.loop) {
         stop(sound.id)
 
@@ -39,14 +40,17 @@ class AudioPlayer {
 
         val job = scope.launch {
             try {
-                playAudio(file, sound.id, volume, loop)
+                playWithSourceDataLine(file, sound.id, volume, loop)
+            } catch (e: CancellationException) {
+                logger.debug { "Playback cancelled for: ${sound.name}" }
             } catch (e: Exception) {
                 logger.error(e) { "Error playing sound: ${sound.name}" }
-                activeClips.remove(sound.id)
+            } finally {
+                activePlayers.remove(sound.id)
             }
         }
 
-        activeClips[sound.id] = ActiveClip(
+        activePlayers[sound.id] = ActivePlayer(
             sound = sound,
             state = PlaybackState.PLAYING,
             volume = volume,
@@ -54,11 +58,7 @@ class AudioPlayer {
         )
     }
 
-    /**
-     * Play audio using javax.sound with automatic format detection.
-     * Supports WAV, AIFF, MP3 (via jlayer), OGG (via jorbis).
-     */
-    private suspend fun playAudio(
+    private suspend fun playWithSourceDataLine(
         file: File,
         soundId: String,
         volume: Float,
@@ -67,8 +67,7 @@ class AudioPlayer {
         val audioInputStream = AudioSystem.getAudioInputStream(file)
         val baseFormat = audioInputStream.format
 
-        // Convert to PCM for playback
-        val decodedFormat = AudioFormat(
+        val pcmFormat = AudioFormat(
             AudioFormat.Encoding.PCM_SIGNED,
             baseFormat.sampleRate,
             16,
@@ -77,89 +76,99 @@ class AudioPlayer {
             baseFormat.sampleRate,
             false
         )
-        val decodedStream = AudioSystem.getAudioInputStream(decodedFormat, audioInputStream)
+        val pcmStream = AudioSystem.getAudioInputStream(pcmFormat, audioInputStream)
 
-        val info = DataLine.Info(Clip::class.java, decodedFormat)
-        val clip = AudioSystem.getLine(info) as Clip
-        clip.open(decodedStream)
+        // Read all bytes into memory for reliable looping
+        val audioBytes = pcmStream.readBytes()
+        pcmStream.close()
+        audioInputStream.close()
 
-        // Set volume via gain control
-        if (clip.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
-            val gainControl = clip.getControl(FloatControl.Type.MASTER_GAIN) as FloatControl
+        val lineInfo = DataLine.Info(SourceDataLine::class.java, pcmFormat)
+        val line = findDeviceLine(pcmFormat) ?: AudioSystem.getLine(lineInfo) as SourceDataLine
+
+        line.open(pcmFormat)
+        line.start()
+        activePlayers[soundId]?.line = line
+
+        // Apply volume
+        if (line.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
+            val gainControl = line.getControl(FloatControl.Type.MASTER_GAIN) as FloatControl
             val gain = if (volume <= 0f) gainControl.minimum
             else (20 * kotlin.math.log10(volume.toDouble())).toFloat()
                 .coerceIn(gainControl.minimum, gainControl.maximum)
             gainControl.value = gain
         }
 
-        activeClips[soundId]?.state = PlaybackState.PLAYING
+        val job = coroutineContext[Job]!!
 
-        if (loop) {
-            clip.loop(Clip.LOOP_CONTINUOUSLY)
-        } else {
-            clip.start()
-        }
+        do {
+            var offset = 0
+            while (offset < audioBytes.size && job.isActive) {
+                val chunkSize = minOf(4096, audioBytes.size - offset)
+                line.write(audioBytes, offset, chunkSize)
+                offset += chunkSize
+            }
 
-        // Wait for playback to finish
-        while (clip.isActive) {
-            delay(100)
-        }
+            if (loop && job.isActive) {
+                delay(50)
+            }
+        } while (loop && job.isActive)
 
-        clip.close()
-        activeClips.remove(soundId)
+        line.drain()
+        line.close()
     }
 
-    /**
-     * Stop a specific sound
-     */
+    private fun findDeviceLine(format: AudioFormat): SourceDataLine? {
+        try {
+            for (mixerInfo in AudioSystem.getMixerInfo()) {
+                if (mixerInfo.name.contains(outputDeviceName, ignoreCase = true)) {
+                    val mixer = AudioSystem.getMixer(mixerInfo)
+                    val lineInfo = DataLine.Info(SourceDataLine::class.java, format)
+                    if (mixer.isLineSupported(lineInfo)) {
+                        return mixer.getLine(lineInfo) as SourceDataLine
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.warn(e) { "Could not find device: $outputDeviceName" }
+        }
+        return null
+    }
+
     fun stop(soundId: String) {
-        activeClips[soundId]?.thread?.cancel()
-        activeClips[soundId]?.state = PlaybackState.STOPPED
-        activeClips.remove(soundId)
-    }
-
-    /**
-     * Stop all sounds
-     */
-    fun stopAll() {
-        activeClips.keys.toList().forEach { stop(it) }
-    }
-
-    /**
-     * Set volume for a playing sound
-     */
-    fun setVolume(soundId: String, volume: Float) {
-        activeClips[soundId]?.let {
-            it.volume = volume
+        val player = activePlayers.remove(soundId) ?: return
+        player.thread?.cancel()
+        player.state = PlaybackState.STOPPED
+        try {
+            player.line?.let { line ->
+                if (line.isOpen) {
+                    line.drain()
+                    line.close()
+                }
+            }
+        } catch (e: Exception) {
+            logger.debug { "Error closing line: ${e.message}" }
         }
     }
 
-    /**
-     * Get current playback state
-     */
+    fun stopAll() {
+        activePlayers.keys.toList().forEach { stop(it) }
+    }
+
     fun getState(soundId: String): PlaybackState {
-        return activeClips[soundId]?.state ?: PlaybackState.STOPPED
+        return activePlayers[soundId]?.state ?: PlaybackState.STOPPED
     }
 
-    /**
-     * Get all currently playing sounds
-     */
     fun getNowPlaying(): List<Pair<String, PlaybackState>> {
-        return activeClips.map { it.key to it.value.state }
+        return activePlayers.map { it.key to it.value.state }
     }
 
-    /**
-     * Get available audio output devices
-     */
     fun getOutputDevices(): List<String> {
         val devices = mutableListOf("default")
         for (mixerInfo in AudioSystem.getMixerInfo()) {
             val mixer = AudioSystem.getMixer(mixerInfo)
-            val sourceLines = mixer.sourceLineInfo
-            for (lineInfo in sourceLines) {
-                if (SourceDataLine::class.java.isAssignableFrom(lineInfo.lineClass) ||
-                    Clip::class.java.isAssignableFrom(lineInfo.lineClass)
-                ) {
+            for (lineInfo in mixer.sourceLineInfo) {
+                if (SourceDataLine::class.java.isAssignableFrom(lineInfo.lineClass)) {
                     devices.add(mixerInfo.name)
                     break
                 }
@@ -168,9 +177,6 @@ class AudioPlayer {
         return devices
     }
 
-    /**
-     * Cleanup
-     */
     fun dispose() {
         stopAll()
         scope.cancel()

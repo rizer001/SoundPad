@@ -1,10 +1,7 @@
 package com.rizer01.soundpad
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -18,8 +15,37 @@ import java.awt.datatransfer.DataFlavor
 import java.awt.dnd.*
 import java.io.File
 
-// Global callback for drag & drop files — set by SoundpadApp
 var onGlobalFilesDropped: ((List<File>) -> Unit)? = null
+
+private fun createDropTarget(): DropTarget {
+    return object : DropTarget() {
+        override fun drop(dtde: DropTargetDropEvent) {
+            try {
+                dtde.acceptDrop(DnDConstants.ACTION_COPY)
+                val transferable = dtde.transferable
+                if (transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+                    @Suppress("UNCHECKED_CAST")
+                    val files = transferable.getTransferData(DataFlavor.javaFileListFlavor) as? List<File>
+                    if (!files.isNullOrEmpty()) {
+                        val exts = setOf("mp3", "wav", "ogg", "flac", "m4a", "aac", "wma")
+                        val audioFiles = files.filter { it.exists() && it.extension.lowercase() in exts }
+                        if (audioFiles.isNotEmpty()) {
+                            onGlobalFilesDropped?.invoke(audioFiles)
+                        }
+                    }
+                }
+                dtde.dropComplete(true)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                dtde.dropComplete(false)
+            }
+        }
+
+        override fun dragEnter(dtde: DropTargetDragEvent) {
+            // placeholder
+        }
+    }
+}
 
 fun main() = application {
     val windowState = rememberWindowState(
@@ -34,34 +60,13 @@ fun main() = application {
     ) {
         window.minimumSize = Dimension(900, 600)
 
-        // Register AWT DropTarget on the JFrame for drag & drop
         LaunchedEffect(Unit) {
             val frame = window
-            frame.dropTarget = object : DropTarget() {
-                override fun drop(dtde: DropTargetDropEvent) {
-                    try {
-                        dtde.acceptDrop(DnDConstants.ACTION_COPY)
-                        val transferable = dtde.transferable
-                        if (transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
-                            @Suppress("UNCHECKED_CAST")
-                            val files = transferable.getTransferData(DataFlavor.javaFileListFlavor) as? List<File>
-                            if (!files.isNullOrEmpty()) {
-                                val audioExtensions = setOf("mp3", "wav", "ogg", "flac", "m4a", "aac", "wma")
-                                val audioFiles = files.filter { f ->
-                                    f.exists() && f.extension.lowercase() in audioExtensions
-                                }
-                                if (audioFiles.isNotEmpty()) {
-                                    onGlobalFilesDropped?.invoke(audioFiles)
-                                }
-                            }
-                        }
-                        dtde.dropComplete(true)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        dtde.dropComplete(false)
-                    }
-                }
-            }
+            frame.dropTarget = createDropTarget()
+            try {
+                frame.glassPane?.dropTarget = createDropTarget()
+                frame.glassPane?.isVisible = false
+            } catch (_: Exception) {}
         }
 
         SoundpadTheme {

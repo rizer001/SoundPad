@@ -15,7 +15,6 @@ import com.rizer01.soundpad.hotkey.HotkeyManager
 import com.rizer01.soundpad.model.NowPlaying
 import com.rizer01.soundpad.model.SoundFile
 import com.rizer01.soundpad.onGlobalFilesDropped
-import com.rizer01.soundpad.store.PresetStore
 import com.rizer01.soundpad.store.SettingsStore
 import com.rizer01.soundpad.store.SoundStore
 import com.rizer01.soundpad.ui.components.*
@@ -29,7 +28,6 @@ private val AccentCyan = Color(0xFF00D4FF)
 @Composable
 fun SoundpadApp() {
     val soundStore = remember { SoundStore() }
-    val presetStore = remember { PresetStore() }
     val settingsStore = remember { SettingsStore() }
     val audioPlayer = remember { AudioPlayer() }
     val hotkeyManager = remember { HotkeyManager() }
@@ -43,17 +41,17 @@ fun SoundpadApp() {
     val outputDevice = remember { mutableStateOf(settingsStore.settings.outputDevice) }
 
     var showSettings by remember { mutableStateOf(false) }
+    val availableDevices = remember { mutableStateOf(audioPlayer.getOutputDevices()) }
 
-    // Helper to add files
+    // Add files helper
     val addFiles: (List<File>) -> Unit = remember(soundStore, selectedCategory) {
         { files ->
             val categoryId = selectedCategory ?: "default"
-            val soundFiles = files.map { it.toSoundFile(categoryId) }
-            soundStore.addSounds(soundFiles)
+            soundStore.addSounds(files.map { it.toSoundFile(categoryId) })
         }
     }
 
-    // Register as global drag & drop handler
+    // Register global drag & drop callback
     LaunchedEffect(Unit) {
         onGlobalFilesDropped = { files -> addFiles(files) }
     }
@@ -61,7 +59,7 @@ fun SoundpadApp() {
         onDispose { onGlobalFilesDropped = null }
     }
 
-    // Initialize hotkey manager
+    // Initialize hotkeys
     LaunchedEffect(Unit) {
         hotkeyManager.init { soundId ->
             soundStore.getSound(soundId)?.let { sound ->
@@ -70,20 +68,21 @@ fun SoundpadApp() {
         }
     }
 
-    // Track now playing
+    // Track playback
     LaunchedEffect(Unit) {
         while (true) {
             delay(100)
-            val playing = audioPlayer.getNowPlaying().mapNotNull { (id, state) ->
-                soundStore.getSound(id)?.let { sound ->
-                    NowPlaying(sound = sound, state = state)
-                }
+            nowPlaying.value = audioPlayer.getNowPlaying().mapNotNull { (id, state) ->
+                soundStore.getSound(id)?.let { NowPlaying(it, state) }
             }
-            nowPlaying.value = playing
         }
     }
 
-    // Cleanup
+    // Update output device when changed
+    LaunchedEffect(outputDevice.value) {
+        audioPlayer.setOutputDevice(outputDevice.value)
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             audioPlayer.dispose()
@@ -103,51 +102,32 @@ fun SoundpadApp() {
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .background(
-                                AccentCyan.copy(alpha = 0.12f),
-                                MaterialTheme.shapes.small
-                            ),
+                            .background(AccentCyan.copy(alpha = 0.12f), MaterialTheme.shapes.small),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            Icons.Filled.GraphicEq,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = AccentCyan
-                        )
+                        Icon(Icons.Filled.GraphicEq, null, Modifier.size(20.dp), tint = AccentCyan)
                     }
                     Spacer(Modifier.width(10.dp))
-                    Text(
-                        "Soundpad",
-                        style = MaterialTheme.typography.headlineSmall
-                    )
+                    Text("Soundpad", style = MaterialTheme.typography.headlineSmall)
                 }
             },
             actions = {
                 SearchBar(
                     query = searchQuery,
                     onQueryChange = { soundStore.setSearchQuery(it) },
-                    modifier = Modifier.width(300.dp)
+                    modifier = Modifier.width(280.dp)
                 )
-
                 Spacer(Modifier.width(8.dp))
 
-                // File picker button
+                // ★ Add Files button
                 FilledTonalButton(
                     onClick = {
                         val files = openAudioFileChooser()
-                        if (files.isNotEmpty()) {
-                            addFiles(files)
-                        }
+                        if (files.isNotEmpty()) addFiles(files)
                     },
-                    shape = MaterialTheme.shapes.small,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    shape = MaterialTheme.shapes.small
                 ) {
-                    Icon(
-                        Icons.Filled.FolderOpen,
-                        contentDescription = "Add files",
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Icon(Icons.Filled.FolderOpen, "Add files", Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Add Files", style = MaterialTheme.typography.labelMedium)
                 }
@@ -156,23 +136,16 @@ fun SoundpadApp() {
 
                 IconButton(onClick = { isDarkTheme.value = !isDarkTheme.value }) {
                     Icon(
-                        imageVector = if (isDarkTheme.value) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                        contentDescription = "Toggle theme",
-                        tint = MaterialTheme.colorScheme.onSurface
+                        if (isDarkTheme.value) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                        "Theme", tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
                 IconButton(onClick = { showSettings = true }) {
-                    Icon(
-                        Icons.Filled.Settings,
-                        contentDescription = "Settings",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
+                    Icon(Icons.Filled.Settings, "Settings", tint = MaterialTheme.colorScheme.onSurface)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
         )
 
         // Main content
@@ -185,14 +158,11 @@ fun SoundpadApp() {
                     else soundStore.getSoundsForCategory(cat.id).size
                 },
                 onCategoryClick = { soundStore.selectCategory(it) },
-                onAddCategory = { /* TODO */ },
+                onAddCategory = {},
                 modifier = Modifier.width(220.dp).fillMaxHeight()
             )
 
-            VerticalDivider(
-                modifier = Modifier.fillMaxHeight(),
-                color = MaterialTheme.colorScheme.outline
-            )
+            VerticalDivider(modifier = Modifier.fillMaxHeight(), color = MaterialTheme.colorScheme.outline)
 
             SoundGrid(
                 sounds = filteredSounds,
@@ -216,9 +186,13 @@ fun SoundpadApp() {
 
     if (showSettings) {
         SettingsDialog(
+            availableDevices = availableDevices.value,
+            currentDevice = outputDevice.value,
             onDismiss = { showSettings = false },
-            onSave = { settings ->
+            onSave = { settings, device ->
                 settingsStore.update { settings }
+                outputDevice.value = device
+                audioPlayer.setOutputDevice(device)
             }
         )
     }

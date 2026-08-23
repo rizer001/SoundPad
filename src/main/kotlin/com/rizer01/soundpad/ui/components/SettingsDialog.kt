@@ -17,16 +17,21 @@ import com.rizer01.soundpad.ui.theme.isDarkTheme
 
 private val AccentCyan = Color(0xFF00D4FF)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsDialog(
+    availableDevices: List<String> = listOf("default"),
+    currentDevice: String = "default",
     onDismiss: () -> Unit,
-    onSave: (AppSettings) -> Unit
+    onSave: (AppSettings, String) -> Unit
 ) {
     var darkTheme by remember { mutableStateOf(isDarkTheme.value) }
     var hotkeysEnabled by remember { mutableStateOf(true) }
     var minimizeToTray by remember { mutableStateOf(true) }
     var autoStart by remember { mutableStateOf(false) }
     var virtualCable by remember { mutableStateOf(false) }
+    var selectedDevice by remember { mutableStateOf(currentDevice) }
+    var deviceExpanded by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -35,113 +40,112 @@ fun SettingsDialog(
             tonalElevation = 8.dp
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(24.dp).heightIn(max = 500.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Header
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .then(Modifier),
+                        modifier = Modifier.size(40.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            Icons.Filled.Settings,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = AccentCyan
-                        )
+                        Icon(Icons.Filled.Settings, null, Modifier.size(24.dp), tint = AccentCyan)
                     }
                     Spacer(Modifier.width(10.dp))
-                    Text(
-                        "Settings",
-                        style = MaterialTheme.typography.headlineSmall
-                    )
+                    Text("Settings", style = MaterialTheme.typography.headlineSmall)
                 }
 
                 HorizontalDivider()
 
-                // Theme
-                SettingsToggle(
-                    title = "Dark Theme",
-                    description = "Use dark color scheme",
-                    icon = if (darkTheme) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                    checked = darkTheme,
-                    onCheckedChange = { darkTheme = it }
-                )
+                // Audio Output Device
+                Text("Audio Output", style = MaterialTheme.typography.titleSmall, color = AccentCyan)
+                ExposedDropdownMenuBox(
+                    expanded = deviceExpanded,
+                    onExpandedChange = { deviceExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedDevice.replace("Primary Sound Driver", "System Default"),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Output Device") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = deviceExpanded) },
+                        leadingIcon = {
+                            Icon(Icons.Filled.Speaker, null, tint = AccentCyan)
+                        },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = deviceExpanded,
+                        onDismissRequest = { deviceExpanded = false }
+                    ) {
+                        availableDevices.forEach { device ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        device.replace("Primary Sound Driver", "System Default"),
+                                        color = if (device == selectedDevice) AccentCyan
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                onClick = {
+                                    selectedDevice = device
+                                    deviceExpanded = false
+                                },
+                                leadingIcon = {
+                                    if (device == selectedDevice) {
+                                        Icon(Icons.Filled.Check, null, tint = AccentCyan, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
 
-                // Hotkeys
-                SettingsToggle(
-                    title = "Global Hotkeys",
-                    description = "Enable keyboard shortcuts for sounds",
-                    icon = Icons.Filled.Keyboard,
-                    checked = hotkeysEnabled,
-                    onCheckedChange = { hotkeysEnabled = it }
-                )
+                HorizontalDivider()
 
-                // Minimize to tray
-                SettingsToggle(
-                    title = "Minimize to Tray",
-                    description = "Keep app running in system tray when closed",
-                    icon = Icons.Filled.WebAsset,
-                    checked = minimizeToTray,
-                    onCheckedChange = { minimizeToTray = it }
-                )
+                // Toggles
+                SettingsToggle("Dark Theme", "Use dark color scheme",
+                    if (darkTheme) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                    darkTheme) { darkTheme = it }
 
-                // Auto start
-                SettingsToggle(
-                    title = "Auto Start",
-                    description = "Start with system",
-                    icon = Icons.Filled.Rocket,
-                    checked = autoStart,
-                    onCheckedChange = { autoStart = it }
-                )
+                SettingsToggle("Global Hotkeys", "Enable keyboard shortcuts for sounds",
+                    Icons.Filled.Keyboard, hotkeysEnabled) { hotkeysEnabled = it }
 
-                // Virtual Cable
-                SettingsToggle(
-                    title = "Virtual Audio Cable",
-                    description = "Route audio to VB-Cable (Discord/OBS)",
-                    icon = Icons.Filled.Mic,
-                    checked = virtualCable,
-                    onCheckedChange = { virtualCable = it }
-                )
+                SettingsToggle("Minimize to Tray", "Keep running in system tray",
+                    Icons.Filled.WebAsset, minimizeToTray) { minimizeToTray = it }
+
+                SettingsToggle("Auto Start", "Start with system",
+                    Icons.Filled.Rocket, autoStart) { autoStart = it }
+
+                SettingsToggle("Virtual Audio Cable", "Route to VB-Cable (Discord/OBS)",
+                    Icons.Filled.Mic, virtualCable) { virtualCable = it }
 
                 HorizontalDivider()
 
                 // Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Cancel")
-                    }
-
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(8.dp))
-
                     Button(
                         onClick = {
                             isDarkTheme.value = darkTheme
                             onSave(
                                 AppSettings(
                                     darkTheme = darkTheme,
+                                    outputDevice = selectedDevice,
                                     hotkeysEnabled = hotkeysEnabled,
                                     minimizeToTray = minimizeToTray,
                                     autoStart = autoStart,
                                     virtualCableEnabled = virtualCable
-                                )
+                                ),
+                                selectedDevice
                             )
                             onDismiss()
                         },
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(
-                            Icons.Filled.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        Icon(Icons.Filled.Check, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("Save")
                     }
@@ -159,39 +163,16 @@ private fun SettingsToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Icon in styled container (like the website)
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .then(Modifier),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = AccentCyan
-            )
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, null, Modifier.size(20.dp), tint = AccentCyan)
         }
-
         Spacer(Modifier.width(12.dp))
-
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Text(
-                description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(description, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
