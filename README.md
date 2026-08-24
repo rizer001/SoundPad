@@ -2,7 +2,7 @@
 
 **Free, open-source soundpad for gamers and streamers.**
 
-![Development status](https://img.shields.io/badge/status-Stable-green)
+![Development status](https://img.shields.io/badge/status-Beta-orange)
 
 Soundpad is a lightweight, cross-platform soundboard application designed for ease of use. Play sounds instantly with hotkeys, organize your sounds into categories, and route audio to any application.
 
