@@ -27,6 +27,8 @@ fun SoundGrid(
     masterVolume: Float,
     hotkeyManager: HotkeyManager,
     onSoundAdded: (SoundFile) -> Unit,
+    onEditSound: (SoundFile) -> Unit,
+    onDeleteSound: (SoundFile) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (sounds.isEmpty()) {
@@ -40,13 +42,8 @@ fun SoundGrid(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Icon in styled container (like the website)
                 Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .then(
-                            Modifier.padding(0.dp)
-                        ),
+                    modifier = Modifier.size(80.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -62,7 +59,7 @@ fun SoundGrid(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "Drag & drop audio files here\nor click + to add sounds",
+                    "Drop audio files here\nor use the browse button above",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -84,7 +81,8 @@ fun SoundGrid(
                     sound = sound,
                     audioPlayer = audioPlayer,
                     masterVolume = masterVolume,
-                    hotkey = hotkeyManager.getHotkey(sound.id)
+                    onEdit = { onEditSound(sound) },
+                    onDelete = { onDeleteSound(sound) }
                 )
             }
         }

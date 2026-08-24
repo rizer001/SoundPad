@@ -1,7 +1,9 @@
 package com.rizer01.soundpad.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -20,16 +22,17 @@ private val AccentCyan = Color(0xFF00D4FF)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsDialog(
+    currentSettings: AppSettings,
     availableDevices: List<String> = listOf("default"),
     currentDevice: String = "default",
     onDismiss: () -> Unit,
     onSave: (AppSettings, String) -> Unit
 ) {
-    var darkTheme by remember { mutableStateOf(isDarkTheme.value) }
-    var hotkeysEnabled by remember { mutableStateOf(true) }
-    var minimizeToTray by remember { mutableStateOf(true) }
-    var autoStart by remember { mutableStateOf(false) }
-    var virtualCable by remember { mutableStateOf(false) }
+    var darkTheme by remember { mutableStateOf(currentSettings.darkTheme) }
+    var hotkeysEnabled by remember { mutableStateOf(currentSettings.hotkeysEnabled) }
+    var minimizeToTray by remember { mutableStateOf(currentSettings.minimizeToTray) }
+    var autoStart by remember { mutableStateOf(currentSettings.autoStart) }
+    var virtualCable by remember { mutableStateOf(currentSettings.virtualCableEnabled) }
     var selectedDevice by remember { mutableStateOf(currentDevice) }
     var deviceExpanded by remember { mutableStateOf(false) }
 
@@ -40,8 +43,9 @@ fun SettingsDialog(
             tonalElevation = 8.dp
         ) {
             Column(
-                modifier = Modifier.padding(24.dp).heightIn(max = 500.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier
+                    .widthIn(max = 420.dp)
+                    .padding(24.dp)
             ) {
                 // Header
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -55,83 +59,96 @@ fun SettingsDialog(
                     Text("Settings", style = MaterialTheme.typography.headlineSmall)
                 }
 
-                HorizontalDivider()
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-                // Audio Output Device
-                Text("Audio Output", style = MaterialTheme.typography.titleSmall, color = AccentCyan)
-                ExposedDropdownMenuBox(
-                    expanded = deviceExpanded,
-                    onExpandedChange = { deviceExpanded = it }
+                // Scrollable content
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    OutlinedTextField(
-                        value = selectedDevice.replace("Primary Sound Driver", "System Default"),
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Output Device") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = deviceExpanded) },
-                        leadingIcon = {
-                            Icon(Icons.Filled.Speaker, null, tint = AccentCyan)
-                        },
-                        modifier = Modifier.fillMaxWidth().menuAnchor(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    ExposedDropdownMenu(
+                    // Audio Output Device
+                    Text("Audio Output", style = MaterialTheme.typography.titleSmall, color = AccentCyan)
+                    ExposedDropdownMenuBox(
                         expanded = deviceExpanded,
-                        onDismissRequest = { deviceExpanded = false }
+                        onExpandedChange = { deviceExpanded = it }
                     ) {
-                        availableDevices.forEach { device ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        device.replace("Primary Sound Driver", "System Default"),
-                                        color = if (device == selectedDevice) AccentCyan
-                                        else MaterialTheme.colorScheme.onSurface
-                                    )
-                                },
-                                onClick = {
-                                    selectedDevice = device
-                                    deviceExpanded = false
-                                },
-                                leadingIcon = {
-                                    if (device == selectedDevice) {
-                                        Icon(Icons.Filled.Check, null, tint = AccentCyan, modifier = Modifier.size(16.dp))
+                        OutlinedTextField(
+                            value = selectedDevice.replace("Primary Sound Driver", "System Default"),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Output Device") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = deviceExpanded) },
+                            leadingIcon = {
+                                Icon(Icons.Filled.Speaker, null, tint = AccentCyan)
+                            },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = deviceExpanded,
+                            onDismissRequest = { deviceExpanded = false }
+                        ) {
+                            availableDevices.forEach { device ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            device.replace("Primary Sound Driver", "System Default"),
+                                            color = if (device == selectedDevice) AccentCyan
+                                            else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedDevice = device
+                                        deviceExpanded = false
+                                    },
+                                    leadingIcon = {
+                                        if (device == selectedDevice) {
+                                            Icon(Icons.Filled.Check, null, tint = AccentCyan, modifier = Modifier.size(16.dp))
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
+
+                    HorizontalDivider()
+
+                    // Toggles
+                    SettingsToggle("Dark Theme", "Use dark color scheme",
+                        if (darkTheme) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                        darkTheme) { darkTheme = it }
+
+                    SettingsToggle("Global Hotkeys", "Enable keyboard shortcuts for sounds",
+                        Icons.Filled.Keyboard, hotkeysEnabled) { hotkeysEnabled = it }
+
+                    SettingsToggle("Minimize to Tray", "Keep running in system tray",
+                        Icons.Filled.WebAsset, minimizeToTray) { minimizeToTray = it }
+
+                    SettingsToggle("Auto Start", "Start with system",
+                        Icons.Filled.Rocket, autoStart) { autoStart = it }
+
+                    SettingsToggle("Virtual Audio Cable", "Route to VB-Cable (Discord/OBS)",
+                        Icons.Filled.Mic, virtualCable) { virtualCable = it }
                 }
 
-                HorizontalDivider()
+                HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp))
 
-                // Toggles
-                SettingsToggle("Dark Theme", "Use dark color scheme",
-                    if (darkTheme) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                    darkTheme) { darkTheme = it }
-
-                SettingsToggle("Global Hotkeys", "Enable keyboard shortcuts for sounds",
-                    Icons.Filled.Keyboard, hotkeysEnabled) { hotkeysEnabled = it }
-
-                SettingsToggle("Minimize to Tray", "Keep running in system tray",
-                    Icons.Filled.WebAsset, minimizeToTray) { minimizeToTray = it }
-
-                SettingsToggle("Auto Start", "Start with system",
-                    Icons.Filled.Rocket, autoStart) { autoStart = it }
-
-                SettingsToggle("Virtual Audio Cable", "Route to VB-Cable (Discord/OBS)",
-                    Icons.Filled.Mic, virtualCable) { virtualCable = it }
-
-                HorizontalDivider()
-
-                // Buttons
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                // Buttons — ALWAYS visible at the bottom
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
                             isDarkTheme.value = darkTheme
+                            // Preserve ALL existing fields (masterVolume, gridColumns, etc.)
                             onSave(
-                                AppSettings(
+                                currentSettings.copy(
                                     darkTheme = darkTheme,
                                     outputDevice = selectedDevice,
                                     hotkeysEnabled = hotkeysEnabled,

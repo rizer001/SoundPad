@@ -33,7 +33,8 @@ data class SoundCategory(
     val name: String,
     val icon: String = "folder",    // Material icon name
     val color: Long = 0xFF6750A4,   // Material purple
-    val order: Int = 0
+    val order: Int = 0,
+    val customIconPath: String? = null // Path to custom icon image
 )
 
 /**

@@ -7,6 +7,8 @@ import com.github.kwhat.jnativehook.keyboard.NativeKeyEvent
 import com.github.kwhat.jnativehook.keyboard.NativeKeyListener
 import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 private val logger = KotlinLogging.logger {}
 
@@ -21,6 +23,13 @@ class HotkeyManager {
     private var callback: ((String) -> Unit)? = null
     private var isRegistered = false
 
+    // Key capture state
+    @Volatile
+    private var capturing = false
+    @Volatile
+    private var capturedKey: String? = null
+    private var captureLatch: CountDownLatch? = null
+
     /**
      * Initialize the global hotkey listener
      */
@@ -32,6 +41,14 @@ class HotkeyManager {
             GlobalScreen.addNativeKeyListener(object : NativeKeyListener {
                 override fun nativeKeyPressed(e: NativeKeyEvent) {
                     val combo = keyEventToString(e)
+
+                    // If capturing, record the key and stop
+                    if (capturing) {
+                        capturedKey = combo
+                        captureLatch?.countDown()
+                        return
+                    }
+
                     bindings[combo]?.let { soundId ->
                         logger.debug { "Hotkey triggered: $combo → $soundId" }
                         callback?.invoke(soundId)
@@ -46,6 +63,28 @@ class HotkeyManager {
         } catch (e: NativeHookException) {
             logger.error(e) { "Failed to register global hotkey listener" }
         }
+    }
+
+    /**
+     * Capture the next key press. Returns the key combo string, or null if timed out.
+     * Blocks for up to [timeoutMs] milliseconds.
+     */
+    fun captureNextKey(timeoutMs: Long = 5000): String? {
+        if (!isRegistered) return null
+        capturing = true
+        capturedKey = null
+        captureLatch = CountDownLatch(1)
+
+        val result = try {
+            captureLatch?.await(timeoutMs, TimeUnit.MILLISECONDS)
+            capturedKey
+        } catch (e: InterruptedException) {
+            null
+        } finally {
+            capturing = false
+            captureLatch = null
+        }
+        return result
     }
 
     /**

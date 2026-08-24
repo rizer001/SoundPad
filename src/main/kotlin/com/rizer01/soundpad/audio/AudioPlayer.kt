@@ -3,11 +3,11 @@ package com.rizer01.soundpad.audio
 import com.rizer01.soundpad.model.PlaybackState
 import com.rizer01.soundpad.model.SoundFile
 import kotlinx.coroutines.*
-import kotlin.coroutines.coroutineContext
 import mu.KotlinLogging
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import javax.sound.sampled.*
+import kotlin.coroutines.coroutineContext
 
 private val logger = KotlinLogging.logger {}
 
@@ -19,10 +19,14 @@ class AudioPlayer {
 
     data class ActivePlayer(
         val sound: SoundFile,
-        var state: PlaybackState,
+        @Volatile var state: PlaybackState,
         var volume: Float,
         var thread: Job? = null,
-        var line: SourceDataLine? = null
+        var line: SourceDataLine? = null,
+        var totalBytes: Int = 0,
+        var bytesWritten: Int = 0,
+        var startTimeMs: Long = 0L,
+        var durationMs: Long = 0L
     )
 
     fun setOutputDevice(name: String) {
@@ -50,11 +54,34 @@ class AudioPlayer {
             }
         }
 
+        // Pre-calculate duration from PCM data (not file bytes!)
+        val durationMs = try {
+            val ais = AudioSystem.getAudioInputStream(file)
+            val baseFormat = ais.format
+            val pcmFormat = AudioFormat(
+                AudioFormat.Encoding.PCM_SIGNED,
+                baseFormat.sampleRate, 16, baseFormat.channels,
+                baseFormat.channels * 2, baseFormat.sampleRate, false
+            )
+            val pcmStream = AudioSystem.getAudioInputStream(pcmFormat, ais)
+            val pcmBytes = pcmStream.readAllBytes().size.toLong()
+            pcmStream.close()
+            ais.close()
+            val frameSize = pcmFormat.frameSize.toLong()
+            val frameRate = pcmFormat.frameRate.toLong()
+            if (frameSize > 0 && frameRate > 0) (pcmBytes / frameSize * 1000 / frameRate) else 0L
+        } catch (e: Exception) {
+            logger.warn(e) { "Could not calculate duration, using fallback" }
+            0L
+        }
+
         activePlayers[sound.id] = ActivePlayer(
             sound = sound,
             state = PlaybackState.PLAYING,
             volume = volume,
-            thread = job
+            thread = job,
+            startTimeMs = System.currentTimeMillis(),
+            durationMs = durationMs
         )
     }
 
@@ -78,10 +105,14 @@ class AudioPlayer {
         )
         val pcmStream = AudioSystem.getAudioInputStream(pcmFormat, audioInputStream)
 
-        // Read all bytes into memory for reliable looping
-        val audioBytes = pcmStream.readBytes()
+        var audioBytes = pcmStream.readAllBytes()
         pcmStream.close()
         audioInputStream.close()
+
+        // Apply volume to PCM samples directly (16-bit signed LE)
+        audioBytes = applyVolume(audioBytes, volume)
+
+        activePlayers[soundId]?.totalBytes = audioBytes.size
 
         val lineInfo = DataLine.Info(SourceDataLine::class.java, pcmFormat)
         val line = findDeviceLine(pcmFormat) ?: AudioSystem.getLine(lineInfo) as SourceDataLine
@@ -90,14 +121,7 @@ class AudioPlayer {
         line.start()
         activePlayers[soundId]?.line = line
 
-        // Apply volume
-        if (line.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
-            val gainControl = line.getControl(FloatControl.Type.MASTER_GAIN) as FloatControl
-            val gain = if (volume <= 0f) gainControl.minimum
-            else (20 * kotlin.math.log10(volume.toDouble())).toFloat()
-                .coerceIn(gainControl.minimum, gainControl.maximum)
-            gainControl.value = gain
-        }
+        // Don't use MASTER_GAIN — volume is already baked into samples
 
         val job = coroutineContext[Job]!!
 
@@ -107,15 +131,35 @@ class AudioPlayer {
                 val chunkSize = minOf(4096, audioBytes.size - offset)
                 line.write(audioBytes, offset, chunkSize)
                 offset += chunkSize
+                activePlayers[soundId]?.bytesWritten = offset
             }
 
             if (loop && job.isActive) {
+                activePlayers[soundId]?.bytesWritten = 0
                 delay(50)
             }
         } while (loop && job.isActive)
 
         line.drain()
         line.close()
+    }
+
+    /**
+     * Apply volume scaling to 16-bit signed PCM samples.
+     * Each sample is 2 bytes (little-endian): low byte + high byte.
+     */
+    private fun applyVolume(data: ByteArray, volume: Float): ByteArray {
+        if (volume >= 0.99f) return data // no scaling needed
+        val result = ByteArray(data.size)
+        var i = 0
+        while (i < data.size - 1) {
+            val sample = (data[i].toInt() and 0xFF) or (data[i + 1].toInt() shl 8)
+            val scaled = (sample.toShort() * volume).toInt().coerceIn(-32768, 32767)
+            result[i] = (scaled and 0xFF).toByte()
+            result[i + 1] = ((scaled shr 8) and 0xFF).toByte()
+            i += 2
+        }
+        return result
     }
 
     private fun findDeviceLine(format: AudioFormat): SourceDataLine? {
@@ -133,6 +177,26 @@ class AudioPlayer {
             logger.warn(e) { "Could not find device: $outputDeviceName" }
         }
         return null
+    }
+
+    /** Get playback progress 0.0 - 1.0 for a sound (time-based) */
+    fun getProgress(soundId: String): Float {
+        val player = activePlayers[soundId] ?: return 0f
+        if (player.durationMs <= 0) return 0f
+        val elapsed = System.currentTimeMillis() - player.startTimeMs
+        return (elapsed.toFloat() / player.durationMs).coerceIn(0f, 1f)
+    }
+
+    /** Get elapsed playback time in seconds */
+    fun getElapsedTime(soundId: String): Float {
+        val player = activePlayers[soundId] ?: return 0f
+        return ((System.currentTimeMillis() - player.startTimeMs) / 1000f)
+    }
+
+    /** Get total duration in seconds */
+    fun getDuration(soundId: String): Float {
+        val player = activePlayers[soundId] ?: return 0f
+        return player.durationMs / 1000f
     }
 
     fun stop(soundId: String) {

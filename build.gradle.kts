@@ -1,4 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.bundling.Zip
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -31,6 +33,9 @@ dependencies {
 
     // Global hotkeys
     implementation(libs.jnativehook)
+
+    // SQLite — portable DB (stored next to JAR)
+    implementation("org.xerial:sqlite-jdbc:3.45.3.0")
 
     // JSON serialization
     implementation(libs.serialization.json)
@@ -82,4 +87,70 @@ tasks.test {
 
 kotlin {
     jvmToolchain(21)
+}
+
+// ══════════════════════════════════════════════════════
+// Portable Distribution Tasks
+// ══════════════════════════════════════════════════════
+
+val portableDistDir = layout.buildDirectory.dir("portable/Soundpad")
+
+/** Fat JAR with all dependencies for portable distribution */
+tasks.register<Jar>("fatJar") {
+    archiveClassifier.set("")
+    manifest {
+        attributes["Main-Class"] = "com.rizer01.soundpad.MainKt"
+    }
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) }) {
+        exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+    }
+    from(sourceSets.main.get().output)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+/** Build portable folder: fat JAR + launch scripts + sounds dir + data dir */
+tasks.register("portableDistribution") {
+    group = "distribution"
+    description = "Assembles the portable Soundpad folder (fat JAR + launch scripts)."
+    dependsOn("fatJar")
+
+    doLast {
+        val rootDir = portableDistDir.get().asFile
+        delete(rootDir)
+        rootDir.mkdirs()
+
+        // Copy fat JAR
+        copy {
+            from(tasks.named<Jar>("fatJar").flatMap { it.archiveFile })
+            into(rootDir)
+            rename { "Soundpad.jar" }
+        }
+
+        // Create directories for portable data
+        File(rootDir, "sounds").mkdirs()
+        File(rootDir, "data").mkdirs()
+
+        // Copy launch scripts
+        copy {
+            from(layout.projectDirectory.dir("scripts").asFile)
+            into(rootDir)
+        }
+
+        // Make .sh executable on Linux/Mac
+        if (!System.getProperty("os.name").lowercase().contains("windows")) {
+            File(rootDir, "Soundpad.sh").setExecutable(true)
+        }
+
+        logger.lifecycle("Portable Soundpad assembled at: ${rootDir.absolutePath}")
+    }
+}
+
+/** Zip the portable folder */
+tasks.register<Zip>("portableZip") {
+    group = "distribution"
+    description = "Bundles the portable Soundpad folder into a zip."
+    dependsOn("portableDistribution")
+    archiveFileName.set("Soundpad-portable.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("portable"))
+    from(portableDistDir)
 }

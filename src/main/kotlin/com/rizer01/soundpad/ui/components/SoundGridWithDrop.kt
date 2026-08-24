@@ -17,6 +17,8 @@ fun SoundGridWithDrop(
     masterVolume: Float,
     hotkeyManager: HotkeyManager,
     onFilesDropped: (List<java.io.File>) -> Unit,
+    onEditSound: (SoundFile) -> Unit = {},
+    onDeleteSound: (SoundFile) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     SoundGrid(
@@ -25,6 +27,8 @@ fun SoundGridWithDrop(
         masterVolume = masterVolume,
         hotkeyManager = hotkeyManager,
         onSoundAdded = {},
+        onEditSound = onEditSound,
+        onDeleteSound = onDeleteSound,
         modifier = modifier
     )
 }
