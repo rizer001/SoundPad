@@ -6,6 +6,12 @@
 
 Soundpad is a lightweight, cross-platform soundboard application designed for ease of use. Play sounds instantly with hotkeys, organize your sounds into categories, and route audio to any application.
 
+---
+
+### 📄 Organization Docs
+
+[![Guide](https://img.shields.io/badge/Guide-rizer001--Development-00AEFF)](https://github.com/rizer001-Development/.github/blob/main/GUIDE.md) · [![Contributing](https://img.shields.io/badge/Contributing-rizer001--Development-4CAF50)](https://github.com/rizer001-Development/.github/blob/main/CONTRIBUTING.md) · [![Security](https://img.shields.io/badge/Security-rizer001--Development-D9534F)](https://github.com/rizer001-Development/.github/blob/main/SECURITY.md) · [![Code of Conduct](https://img.shields.io/badge/Code%20of%20Conduct-rizer001--Development-5BC0DE)](https://github.com/rizer001-Development/.github/blob/main/CODE_OF_CONDUCT.md)
+
 ## ✨ Features
 
 - 🎵 **Multi-format support** — MP3, WAV, OGG, FLAC, M4A, AAC, WMA
