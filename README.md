@@ -1,4 +1,4 @@
-# 🔊 Soundpad
+# Soundpad
 
 **Free, open-source soundpad for gamers and streamers.**
 
@@ -8,24 +8,24 @@ Soundpad is a lightweight, cross-platform soundboard application designed for ea
 
 ---
 
-### 📄 Organization Docs
+### Organization Docs
 
 [![Guide](https://img.shields.io/badge/Guide-rizer001--Development-00AEFF)](https://github.com/rizer001-Development/.github/blob/main/GUIDE.md) · [![Contributing](https://img.shields.io/badge/Contributing-rizer001--Development-4CAF50)](https://github.com/rizer001-Development/.github/blob/main/CONTRIBUTING.md) · [![Security](https://img.shields.io/badge/Security-rizer001--Development-D9534F)](https://github.com/rizer001-Development/.github/blob/main/SECURITY.md) · [![Code of Conduct](https://img.shields.io/badge/Code%20of%20Conduct-rizer001--Development-5BC0DE)](https://github.com/rizer001-Development/.github/blob/main/CODE_OF_CONDUCT.md)
 
-## ✨ Features
+## Features
 
-- 🎵 **Multi-format support** — MP3, WAV, OGG, FLAC, M4A, AAC, WMA
-- ⌨️ **Global hotkeys** — Play sounds even when the app is minimized
-- 📂 **Categories** — Organize sounds into groups (Memes, Alerts, Music, etc.)
-- 📋 **Presets** — Save and load sound collections as JSON files
-- 🔊 **Master volume** — Control overall output volume
-- 🎤 **Virtual audio cable** — Route audio to Discord, OBS, Teams, etc.
-- 🌙 **Dark/Light theme** — Choose your preferred look
-- 🔍 **Search** — Instantly find sounds by name
-- 📦 **Drag & drop** — Add sounds by dropping files into the app
-- 💾 **Lightweight** — ~30MB RAM usage, fast startup
+- **Multi-format support** — MP3, WAV, OGG, FLAC, M4A, AAC, WMA
+- **Global hotkeys** — Play sounds even when the app is minimized
+- **Categories** — Organize sounds into groups (Memes, Alerts, Music, etc.)
+- **Presets** — Save and load sound collections as JSON files
+- **Master volume** — Control overall output volume
+- **Virtual audio cable** — Route audio to Discord, OBS, Teams, etc.
+- **Dark/Light theme** — Choose your preferred look
+- **Search** — Instantly find sounds by name
+- **Drag & drop** — Add sounds by dropping files into the app
+- **Lightweight** — ~30MB RAM usage, fast startup
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -57,7 +57,7 @@ cd Soundpad
 ./gradlew packageRpm
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Soundpad/
@@ -94,7 +94,7 @@ Soundpad/
 └── LICENSE                       # AGPLv3
 ```
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
@@ -105,15 +105,15 @@ Soundpad/
 | Serialization | kotlinx.serialization |
 | Build | Gradle Kotlin DSL |
 
-## 📄 License
+## License
 
 This project is licensed under the **GNU Affero General Public License v3.0** — see the [LICENSE](LICENSE) file for details.
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. Please feel free to submit a Pull Request.
 
-## 📧 Contact
+## Contact
 
 - **GitHub:** [rizer01](https://github.com/rizer01)
-- **Discord:** [Join our server](https://discord.gg/rizer01)
+- **Discord:** [Join our server](https://discord.gg/rizer01)
