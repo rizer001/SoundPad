@@ -14,7 +14,9 @@ import com.rizer01.soundpad.ui.theme.SoundpadTheme
 import java.awt.Dimension
 import java.awt.datatransfer.DataFlavor
 import java.awt.dnd.*
+import java.awt.image.BufferedImage
 import java.io.File
+import javax.imageio.ImageIO
 import javax.swing.JFrame
 
 /** Global callback: files dropped from OS file explorer onto the window */
@@ -92,9 +94,21 @@ fun main() = application {
         // Install AWT DropTarget on JFrame after it's available
         LaunchedEffect(Unit) {
             installDropTarget(window as JFrame)
+            val icon = loadAppIcon()
+            if (icon != null) (window as JFrame).iconImage = icon
         }
         SoundpadTheme {
             SoundpadApp(db = dbManager)
         }
+    }
+}
+
+/** Loads the bundled black-square app icon so the window/taskbar show it instead of the Java default. */
+private fun loadAppIcon(): BufferedImage? {
+    return try {
+        val stream = Thread.currentThread().contextClassLoader.getResourceAsStream("/icons/app-icon.png")
+        stream?.use { ImageIO.read(it) }
+    } catch (e: Exception) {
+        null
     }
 }
